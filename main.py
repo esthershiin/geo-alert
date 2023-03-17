@@ -8,7 +8,7 @@ location, we send an email alert to sprinter-eng-test@guerrillamail.info.
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import smtplib, ssl
+import smtplib
 from shapely.geometry import Point, Polygon
 from datetime import datetime
 import requests
@@ -20,6 +20,7 @@ import time
 
 def main():
     url = "https://3qbqr98twd.execute-api.us-west-2.amazonaws.com/test/clinicianstatus/{}"
+    # url = "https://httpstat.us/503" # for testing
 
     while True:
         print("Polling")
@@ -28,24 +29,16 @@ def main():
             
             # API call successful
             if response.status_code == 200:
-                
                 # extract geolocation
                 geolocation = response.json()
                 location, bounds = extract_and_convert_geolocation(geolocation)
-    
-                # check if clinician is out of safety bounds
-                in_bound = False
-                for b in bounds:
-                    if b.contains(location) or b.touches(location):
-                        in_bound = True
-                        break
-                
-                # if out of safety bounds, send email alert
-                if not in_bound:
+                # check if clinician is out of safety boundaries
+                in_boundary = clinician_in_boundary(location, bounds)
+                # if out of safety boundaries, send email alert
+                if not in_boundary:
                     print("Clinician {} out of bounds, sending email alert.".format(clinician_id))
                     now = datetime.now()
                     timestamp = now.strftime("%m/%d/%Y %H:%M:%S")
-                    
                     subject = "[GEO-ALERT] Clinician Out of Safety Zone"
                     msg = "Phlebotomist with ID #{} was spotted outside of their safety zone.\n\nUTC Time: {}\n"\
                         "Last location: {}\nSafety zone: {}\n".format(clinician_id, timestamp, location, bounds)
@@ -56,7 +49,6 @@ def main():
                 print('Failed to retrieve geolocation for clinician {}, sending email alert.'.format(clinician_id))
                 now = datetime.now()
                 timestamp = now.strftime("%m/%d/%Y %H:%M:%S")
-                
                 subject = "[GEO-ALERT] Endpoint Failure"
                 msg = "ClinicianStatus endpoint failed to retrieve the geolocation of the phlebotomist "\
                     "with ID #{}.\n\nUTC Time: {}\nResponse code: {}\nResponse message: {}\n"\
@@ -64,6 +56,7 @@ def main():
                 send_email(subject, msg)
         
         # short poll API every 60 seconds
+        print("Sleeping")
         time.sleep(60)
         
         
@@ -72,56 +65,81 @@ def main():
 # ++++++++++++++++++++
 
 def extract_and_convert_geolocation(geolocation):
-    """_summary_
+    """ Takes in the geolocation json information and extracts 
+    the clinician's location and safe zone boundaries. It then 
+    converts the extracted data in geometry objects (point and 
+    polygons).
 
     Args:
-        geolocation (_type_): _description_
+        geolocation (dict): json-encoded geolocation information
 
     Returns:
-        _type_: _description_
+        Point: clinician's location
+        List[Polygon]: list of safe zone boundaries
     """
     location, bounds = None, []
     for feat in geolocation['features']:
-        
         # Point --> clinician coords
         if feat['geometry']['type'] == 'Point':
-            location = Point(feat['geometry']['coordinates'])
-        
+            location = Point(feat['geometry']['coordinates'])  
         # Polygon --> boundary lines  
         else:
-            poly = Polygon(feat['geometry']['coordinates'])
-            bounds.append(poly)
-    
+            for poly in feat['geometry']['coordinates']:
+                bounds.append(Polygon(poly))
     return location, bounds
-        
+
+def clinician_in_boundary(location, bounds):
+    """ Checks if the clinician's location is within
+    or on the boundary line of any of the safe zones 
+    in bounds.
+
+    Args:
+        location (Point): clinician's location
+        bounds (List[Polygon]): list of safe zone boundaries
+
+    Returns:
+        bool: True if clinician is in safe zone,
+        False otherwise.
+    """
+    in_boundary = False
+    for b in bounds:
+        if b.contains(location) or b.touches(location):
+            in_boundary = True
+            break
+    return in_boundary
+
         
 # ++++++++++++++++++++
 #    Alerting Logic
 # ++++++++++++++++++++
 
 def send_email(subject, msg):
-    """_summary_
+    """ Constructs email with input subject and message text and
+    sends email via starttls from geoalert.eshin@gmail.com to
+    sprinter-eng-test@guerrillamail.info. If it fails to send
+    an email alert, it raises an exception.
 
     Args:
-        subject (_type_): _description_
-        msg (_type_): _description_
+        subject (str): email subject text
+        msg (str): email body text
     """
     mail = MIMEMultipart()
     mail["From"] = "geoalert.eshin@gmail.com"
     mail["To"] = "sprinter-eng-test@guerrillamail.info"
     mail["Subject"] = subject
     mail.attach(MIMEText(msg))
+    
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)  # port 587 for starttls
         server.ehlo() # identification
-        server.starttls() # secure conection
+        server.starttls() # secure connection
         server.ehlo() # secure identification
         server.login("geoalert.eshin@gmail.com", "nxombzymdtrxmtkz")  # login
         server.sendmail("geoalert.eshin@gmail.com", "sprinter-eng-test@guerrillamail.info", mail.as_string()) # send email
     except Exception as e:
         print('Failed to send email alert. Exception:', e)
     finally: 
-        server.quit()
+        server.quit() # stop server
 
 
 # ++++++++++++++++++++    
@@ -130,23 +148,3 @@ def send_email(subject, msg):
 
 if __name__ == "__main__":
     main()
-
-
-"""
- THOUGHTS:
-    - have a clinicians.txt file holding all ids and extract ids from that file  
-    - store email messages in separate txt file?
-    - have a separate config file for email credentials 
-    - move different code logics (email / geolocation) into separate files?
-    - error handling ?? --> ex: json parsing
-    - send email after each polling session or for each client??
-    - need safer storage for passwords
-    
-RESOURCES:
-    - Geometry
-        - https://automating-gis-processes.github.io/2017/lessons/L3/point-in-polygon.html
-    - Email Alerts
-        - https://realpython.com/python-send-email
-        - https://levelup.gitconnected.com/an-alternative-way-to-send-emails-in-python-5630a7efbe84
-        - https://www.guerrillamail.com/
-"""
