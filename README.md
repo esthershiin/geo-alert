@@ -1,5 +1,10 @@
 # geo-alert
 
+INSTRUCTIONS:
+- To run the service, you have to first create an **.env** file at the root directory of the project. The file contents should be 
+**password = '{app-password}'**, where {app-password} is the credentials needed to login to the sender email account. 
+- Then, simply run **main.py**.
+
 
 REFLECTION:
 - Although we hardcoded the clinician IDs (1-6) here, we can have a separate txt file where we extract all IDs from before polling. This will be more practical in a real-life system where our clinician IDs list will be constantly growing and updated.
