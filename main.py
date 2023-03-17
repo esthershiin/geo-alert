@@ -41,7 +41,7 @@ def main():
                     timestamp = now.strftime("%m/%d/%Y %H:%M:%S")
                     subject = "[GEO-ALERT] Clinician Out of Safety Zone"
                     msg = "Phlebotomist with ID #{} was spotted outside of their safety zone.\n\nUTC Time: {}\n"\
-                        "Last location: {}\nSafety zone: {}\n".format(clinician_id, timestamp, location, bounds)
+                        "Last location: ({}, {})\n".format(clinician_id, timestamp, location.x, location.y)
                     send_email(subject, msg)
                     
             else:
@@ -115,7 +115,7 @@ def clinician_in_boundary(location, bounds):
 
 def send_email(subject, msg):
     """ Constructs email with input subject and message text and
-    sends email via starttls from geoalert.eshin@gmail.com to
+    sends email via starttls from geoalerts.sh@gmail.com to
     sprinter-eng-test@guerrillamail.info. If it fails to send
     an email alert, it raises an exception.
 
@@ -124,7 +124,7 @@ def send_email(subject, msg):
         msg (str): email body text
     """
     mail = MIMEMultipart()
-    mail["From"] = "geoalert.eshin@gmail.com"
+    mail["From"] = "geoalerts.sh@gmail.com"
     mail["To"] = "sprinter-eng-test@guerrillamail.info"
     mail["Subject"] = subject
     mail.attach(MIMEText(msg))
@@ -134,8 +134,9 @@ def send_email(subject, msg):
         server.ehlo() # identification
         server.starttls() # secure connection
         server.ehlo() # secure identification
-        server.login("geoalert.eshin@gmail.com", "nxombzymdtrxmtkz")  # login
-        server.sendmail("geoalert.eshin@gmail.com", "sprinter-eng-test@guerrillamail.info", mail.as_string()) # send email
+        server.login("geoalerts.sh@gmail.com", "qjwestzgdhdvykdz")  # login
+        server.sendmail("geoalerts.sh@gmail.com", "sprinter-eng-test@guerrillamail.info", mail.as_string()) # send email
+        print("Email sent.")
     except Exception as e:
         print('Failed to send email alert. Exception:', e)
     finally: 
